@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Email Authorization Demo</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				line-height: 1.6;
+				color: #333;
+				max-width: 800px;
+				margin: 0 auto;
+				padding: 20px;
+			}
+			
+			h1 {
+				color: #2c3e50;
+				margin-bottom: 30px;
+			}
+			
+			.container {
+				border: 1px solid #ddd;
+				border-radius: 5px;
+				padding: 20px;
+				margin-bottom: 30px;
+				box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+			}
+			
+			.auth-form {
+				display: flex;
+				flex-direction: column;
+				gap: 15px;
+			}
+			
+			.form-group {
+				display: flex;
+				flex-direction: column;
+				gap: 5px;
+			}
+			
+			label {
+				font-weight: bold;
+			}
+			
+			input[type="email"] {
+				padding: 10px;
+				border: 1px solid #ddd;
+				border-radius: 4px;
+			}
+			
+			button {
+				background-color: #3498db;
+				color: white;
+				border: none;
+				padding: 10px 15px;
+				border-radius: 4px;
+				cursor: pointer;
+				font-weight: bold;
+			}
+			
+			button:hover {
+				background-color: #2980b9;
+			}
+			
+			.status {
+				padding: 15px;
+				border-radius: 4px;
+				margin-top: 20px;
+			}
+			
+			.error {
+				background-color: #ffecec;
+				color: #e74c3c;
+				border: 1px solid #f5aca6;
+			}
+			
+			.success {
+				background-color: #e7f6eb;
+				color: #27ae60;
+				border: 1px solid #bdecb6;
+			}
+			
+			.warning {
+				background-color: #fff8e1;
+				color: #f39c12;
+				border: 1px solid #ffe0b2;
+			}
+			
+			.spinner {
+				display: inline-block;
+				width: 20px;
+				height: 20px;
+				border: 3px solid rgba(0,0,0,0.1);
+				border-radius: 50%;
+				border-top-color: #3498db;
+				animation: spin 1s ease-in-out infinite;
+				margin-right: 10px;
+				vertical-align: middle;
+			}
+			
+			@keyframes spin {
+				to { transform: rotate(360deg); }
+			}
+			
+			.hidden {
+				display: none;
+			}
+			
+			.protected-content {
+				border-top: 2px solid #eee;
+				margin-top: 30px;
+				padding-top: 20px;
+			}
+			
+			.footer {
+				margin-top: 50px;
+				text-align: center;
+				color: #7f8c8d;
+				font-size: 0.9em;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Email Authorization Demo</h1>
+		
+		<div class="container">
+			<h2>Check Your Authorization Status</h2>
+			<p>Enter your email to check if you are authorized to access protected content.</p>
+			
+			<form id="authForm" class="auth-form">
+				<div class="form-group">
+					<label for="email">Email Address:</label>
+					<input type="email" id="email" name="email" required>
+				</div>
+				<div>
+					<button type="submit" id="checkButton">Check Authorization</button>
+				</div>
+			</form>
+			
+			<div id="authStatus" class="status hidden"></div>
+			<div id="loadingSpinner" class="hidden">
+				<span class="spinner"></span> Checking authorization...
+			</div>
+		</div>
+		
+		<div id="protectedContent" class="protected-content hidden">
+			<h2>Protected Content</h2>
+			<p>Welcome! You are authorized to view this content. This content is only visible to users with valid email addresses in our approved contact list.</p>
+			<p>Your authorization will be checked every 30 seconds to ensure you maintain access.</p>
+		</div>
+		
+		<div class="footer">
+			<p>PolymedCo Authorization Service Demo &copy; 2024</p>
+		</div>
+		
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+				const authForm = document.getElementById('authForm');
+				const authStatus = document.getElementById('authStatus');
+				const loadingSpinner = document.getElementById('loadingSpinner');
+				const protectedContent = document.getElementById('protectedContent');
+				const emailInput = document.getElementById('email');
+				
+				// Cookie helper functions
+				const setCookie = (name, value, days) => {
+					let expires = '';
+					if (days) {
+						const date = new Date();
+						date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+						expires = '; expires=' + date.toUTCString();
+					}
+					document.cookie = name + '=' + (value || '') + expires + '; path=/';
+				};
+				
+				const getCookie = (name) => {
+					const nameEQ = name + '=';
+					const ca = document.cookie.split(';');
+					for (let i = 0; i < ca.length; i++) {
+						let c = ca[i];
+						while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+						if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+					}
+					return null;
+				};
+				
+				// Function to check email authorization
+				const checkAuthorization = async (email) => {
+					authStatus.classList.add('hidden');
+					loadingSpinner.classList.remove('hidden');
+					
+					try {
+						const response = await fetch('/authorize', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: JSON.stringify({ email })
+						});
+						
+						const data = await response.json();
+						
+						authStatus.classList.remove('hidden');
+						loadingSpinner.classList.add('hidden');
+						
+						if (response.ok) {
+							if (data.status === 'authorized') {
+								authStatus.textContent = 'You are authorized to access the content.';
+								authStatus.className = 'status success';
+								setCookie('polymed_instra_auth_status', 'authorized', 1); // Set cookie for 1 day
+								protectedContent.classList.remove('hidden');
+							} else {
+								authStatus.textContent = 'You are not authorized to access the content.';
+								authStatus.className = 'status warning';
+								setCookie('polymed_instra_auth_status', 'unauthorized', 1);
+								protectedContent.classList.add('hidden');
+							}
+						} else {
+							authStatus.textContent = `Error: ${data.message || 'Failed to check authorization'}`;
+							authStatus.className = 'status error';
+							protectedContent.classList.add('hidden');
+						}
+					} catch (error) {
+						console.error('Authorization check failed:', error);
+						authStatus.textContent = 'Error contacting authorization service. Please try again.';
+						authStatus.className = 'status error';
+						authStatus.classList.remove('hidden');
+						loadingSpinner.classList.add('hidden');
+						protectedContent.classList.add('hidden');
+					}
+				};
+				
+				// Form submission handler
+				authForm.addEventListener('submit', function(e) {
+					e.preventDefault();
+					const email = emailInput.value.trim();
+					checkAuthorization(email);
+				});
+				
+				// Check for stored email and authorization on page load
+				const storedStatus = getCookie('polymed_instra_auth_status');
+				const storedEmail = getCookie('auth_email');
+				
+				if (storedEmail) {
+					emailInput.value = storedEmail;
+					
+					if (storedStatus === 'authorized') {
+						protectedContent.classList.remove('hidden');
+						authStatus.textContent = 'You are authorized to access the content.';
+						authStatus.className = 'status success';
+						authStatus.classList.remove('hidden');
+					} else if (storedStatus === 'unauthorized') {
+						protectedContent.classList.add('hidden');
+						authStatus.textContent = 'You are not authorized to access the content.';
+						authStatus.className = 'status warning';
+						authStatus.classList.remove('hidden');
+					}
+					
+					// Verify authorization status immediately
+					checkAuthorization(storedEmail);
+				}
+				
+				// Set up periodic polling for authorization status
+				setInterval(() => {
+					const currentEmail = emailInput.value.trim();
+					if (currentEmail && getCookie('polymed_instra_auth_status')) {
+						setCookie('auth_email', currentEmail, 1);
+						checkAuthorization(currentEmail);
+					}
+				}, 30000); // Check every 30 seconds
+			});
+		</script>
+	</body>
+</html>
